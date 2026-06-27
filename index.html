@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World Watch — Country Reports</title>
+<style>
+  :root{
+    --parchment:#EFE6D2; --parchment-dark:#E2D5B8; --ink:#23303D; --ink-soft:#56636E;
+    --brass:#B07B2A; --rust:#9C4630; --white-ish:#FBF8F0; --green:#3F7A4F;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--parchment);
+    background-image:
+      radial-gradient(ellipse at 20% 10%, rgba(255,255,255,0.35), transparent 50%),
+      radial-gradient(ellipse at 80% 90%, rgba(0,0,0,0.05), transparent 50%);
+    color:var(--ink); font-family: Georgia, 'Times New Roman', serif; min-height:100vh;
+  }
+  .app{ max-width:1180px; margin:0 auto; padding:28px 20px 60px; }
+  header{
+    display:flex; align-items:flex-end; justify-content:space-between;
+    border-bottom:3px double var(--ink); padding-bottom:14px; margin-bottom:22px; flex-wrap:wrap; gap:10px;
+  }
+  header .title-block h1{ font-size:32px; margin:0; letter-spacing:0.5px; font-weight:700; }
+  header .title-block p{
+    margin:4px 0 0; font-family:'Trebuchet MS', system-ui, sans-serif; font-size:13px;
+    color:var(--ink-soft); letter-spacing:1.5px; text-transform:uppercase;
+  }
+  select#countryDropdown{
+    font-family:'Trebuchet MS', system-ui, sans-serif; font-size:14px; padding:9px 12px;
+    border:1.5px solid var(--ink); background:var(--white-ish); border-radius:2px; min-width:220px;
+  }
+
+  .layout{ display:flex; gap:24px; align-items:flex-start; }
+  .map-pane{
+    flex:1 1 600px; position:relative; border:1.5px solid var(--ink);
+    background:linear-gradient(180deg, #6E9AA8, #3E6877); border-radius:3px; overflow:hidden;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18), inset 0 0 0 6px rgba(239,230,210,0.9), inset 0 0 0 8px var(--ink);
+  }
+  svg#mapsvg{display:block; width:100%; height:auto;}
+  .dot{cursor:pointer; transition: r 0.15s ease;}
+  .dot:hover{filter:brightness(1.3);}
+  .has-report .dot{ stroke:#FFD56B; stroke-width:2; }
+  .dot-label{
+    font-family:'Trebuchet MS', system-ui, sans-serif; font-size:9.5px; fill:#fff;
+    paint-order:stroke; stroke:#1a2530; stroke-width:2px; pointer-events:none; opacity:0; transition:opacity .12s ease;
+  }
+  .country-group:hover .dot-label{opacity:1;}
+  .country-group.active .dot{stroke:#fff; stroke-width:2px;}
+  .country-group.active .dot-label{opacity:1; font-weight:bold;}
+
+  .legend{
+    position:absolute; bottom:10px; left:10px; font-family:'Trebuchet MS', system-ui, sans-serif;
+    font-size:10.5px; color:#eef3f4; background:rgba(20,32,40,0.45); padding:6px 9px; border-radius:3px;
+  }
+  .legend i{width:8px;height:8px;border-radius:50%;display:inline-block; border:2px solid #FFD56B; margin-right:5px;}
+
+  .panel{
+    flex:0 0 380px; border:1.5px solid var(--ink); background:var(--white-ish); border-radius:3px;
+    padding:24px; min-height:480px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .panel-empty{
+    color:var(--ink-soft); font-style:italic; font-size:14.5px; text-align:center; margin-top:60px;
+    font-family:'Trebuchet MS', system-ui, sans-serif;
+  }
+  .panel-empty svg{display:block;margin:0 auto 14px;}
+
+  .country-name{ font-size:26px; margin:0 0 2px; display:flex; align-items:center; gap:9px; }
+  .flag{font-size:28px;}
+  .country-meta{
+    font-family:'Trebuchet MS', system-ui, sans-serif; font-size:12px; color:var(--ink-soft);
+    text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;
+  }
+  .report-updated{
+    font-family:'Trebuchet MS', system-ui, sans-serif; font-size:11.5px; color:var(--ink-soft);
+    margin-bottom:16px;
+  }
+  .report-body h3{
+    font-family:'Trebuchet MS', system-ui, sans-serif; font-size:12.5px; text-transform:uppercase;
+    letter-spacing:1.2px; color:var(--brass); border-bottom:1px solid var(--parchment-dark);
+    padding-bottom:4px; margin:18px 0 8px;
+  }
+  .report-body p{ font-size:15px; line-height:1.55; margin:0 0 10px; }
+  .download-btn{
+    margin-top:18px; display:inline-flex; align-items:center; gap:8px;
+    background:var(--green); color:#fff; text-decoration:none; padding:10px 16px;
+    font-family:'Trebuchet MS', system-ui, sans-serif; font-size:13.5px; border-radius:2px;
+  }
+  .download-btn:hover{background:#2f6140;}
+  .no-report{
+    font-family:'Trebuchet MS', system-ui, sans-serif; font-size:14px; color:var(--ink-soft);
+    background:var(--parchment); border:1px dashed var(--parchment-dark); border-radius:3px;
+    padding:16px; margin-top:14px; line-height:1.5;
+  }
+
+  @media (max-width: 880px){
+    .layout{flex-direction:column;}
+    .panel{flex:1 1 auto; width:100%; min-height:auto;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="title-block">
+      <h1>World Watch</h1>
+      <p>Your own country reports, mapped</p>
+    </div>
+    <select id="countryDropdown">
+      <option value="">Jump to a country…</option>
+    </select>
+  </header>
+
+  <div class="layout">
+    <div class="map-pane">
+      <svg id="mapsvg" viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="legend"><i></i>Gold ring = report written</div>
+    </div>
+
+    <div class="panel" id="panel">
+      <div class="panel-empty" id="panelEmpty">
+        <svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="22" fill="none" stroke="#B07B2A" stroke-width="1.5"/><path d="M24 6 L27 21 L42 24 L27 27 L24 42 L21 27 L6 24 L21 21 Z" fill="#B07B2A" opacity="0.85"/></svg>
+        Click a country on the map, or use the dropdown above, to open its report.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const NS = "http://www.w3.org/2000/svg";
+
+// ---- Continent silhouettes (stylized, not survey-accurate) ----
+const continents = [
+  {color:"#5C8FA8", path:"M95,70 L210,40 L300,65 L320,130 L300,190 L260,235 L215,260 L180,225 L140,235 L120,190 L80,150 L70,100 Z"},
+  {color:"#6FAE7C", path:"M300,265 L360,255 L395,300 L398,365 L375,430 L345,465 L310,440 L290,400 L285,330 Z"},
+  {color:"#B393C9", path:"M460,75 L520,60 L565,75 L575,110 L545,140 L500,150 L465,130 L450,100 Z"},
+  {color:"#D49A4E", path:"M460,155 L520,145 L545,175 L555,230 L535,290 L505,335 L470,345 L450,300 L440,225 L445,185 Z"},
+  {color:"#CB6B4E", path:"M545,140 L610,130 L630,175 L600,210 L560,205 L545,175 Z"},
+  {color:"#C9504C", path:"M580,55 L700,35 L820,55 L850,110 L830,165 L780,210 L720,235 L660,225 L625,180 L600,135 L580,100 Z"},
+  {color:"#4FA8A5", path:"M800,355 L865,340 L905,365 L895,410 L850,425 L805,405 L790,375 Z"}
+];
+const continentColorByName = {
+  "N. America":"#3D6FA0","S. America":"#3F8F60","Europe":"#8E5FAE",
+  "Africa":"#C97A2A","Middle East":"#C2502E","Asia":"#B5332F","Oceania":"#2E8E8B"
+};
+
+const countries = [
+ {name:"United States", iso:"US", lat:39, lon:-98, region:"N. America"},
+ {name:"Canada", iso:"CA", lat:60, lon:-95, region:"N. America"},
+ {name:"Mexico", iso:"MX", lat:23, lon:-102, region:"N. America"},
+ {name:"Brazil", iso:"BR", lat:-10, lon:-55, region:"S. America"},
+ {name:"Argentina", iso:"AR", lat:-34, lon:-64, region:"S. America"},
+ {name:"Chile", iso:"CL", lat:-35, lon:-72, region:"S. America"},
+ {name:"Colombia", iso:"CO", lat:4, lon:-72, region:"S. America"},
+ {name:"Peru", iso:"PE", lat:-10, lon:-76, region:"S. America"},
+ {name:"United Kingdom", iso:"GB", lat:54, lon:-2, region:"Europe"},
+ {name:"France", iso:"FR", lat:46, lon:2, region:"Europe"},
+ {name:"Germany", iso:"DE", lat:51, lon:10, region:"Europe"},
+ {name:"Spain", iso:"ES", lat:40, lon:-4, region:"Europe"},
+ {name:"Italy", iso:"IT", lat:43, lon:12, region:"Europe"},
+ {name:"Poland", iso:"PL", lat:52, lon:19, region:"Europe"},
+ {name:"Ukraine", iso:"UA", lat:49, lon:32, region:"Europe"},
+ {name:"Russia", iso:"RU", lat:56, lon:60, region:"Europe"},
+ {name:"Turkey", iso:"TR", lat:39, lon:35, region:"Middle East"},
+ {name:"Egypt", iso:"EG", lat:26, lon:30, region:"Africa"},
+ {name:"Nigeria", iso:"NG", lat:9, lon:8, region:"Africa"},
+ {name:"South Africa", iso:"ZA", lat:-29, lon:24, region:"Africa"},
+ {name:"Kenya", iso:"KE", lat:-1, lon:38, region:"Africa"},
+ {name:"Morocco", iso:"MA", lat:32, lon:-6, region:"Africa"},
+ {name:"Saudi Arabia", iso:"SA", lat:24, lon:45, region:"Middle East"},
+ {name:"Israel", iso:"IL", lat:31, lon:35, region:"Middle East"},
+ {name:"Iran", iso:"IR", lat:32, lon:53, region:"Middle East"},
+ {name:"UAE", iso:"AE", lat:24, lon:54, region:"Middle East"},
+ {name:"China", iso:"CN", lat:35, lon:103, region:"Asia"},
+ {name:"India", iso:"IN", lat:22, lon:79, region:"Asia"},
+ {name:"Japan", iso:"JP", lat:36, lon:138, region:"Asia"},
+ {name:"South Korea", iso:"KR", lat:36, lon:128, region:"Asia"},
+ {name:"Indonesia", iso:"ID", lat:-2, lon:118, region:"Asia"},
+ {name:"Thailand", iso:"TH", lat:15, lon:101, region:"Asia"},
+ {name:"Vietnam", iso:"VN", lat:16, lon:108, region:"Asia"},
+ {name:"Pakistan", iso:"PK", lat:30, lon:70, region:"Asia"},
+ {name:"Philippines", iso:"PH", lat:13, lon:122, region:"Asia"},
+ {name:"Australia", iso:"AU", lat:-25, lon:133, region:"Oceania"},
+ {name:"New Zealand", iso:"NZ", lat:-41, lon:174, region:"Oceania"}
+];
+
+// ---- YOUR REPORTS GO HERE ----
+// To add a country: write a "html" field (use <p> and <h3> tags) and
+// point "docx" to the matching file in the /reports folder.
+// Anything not listed here will just show "no report yet" on the site.
+const reports = {
+  "France": {
+    updated: "27 June 2026",
+    docx: "reports/france.docx",
+    html: `
+      <p><i>Sample report — replace this with your own.</i></p>
+      <h3>Overview</h3>
+      <p>France is a Western European country of roughly 68 million people, a founding EU member and permanent UN Security Council member. Paris is both the capital and the country's economic and cultural center.</p>
+      <h3>Geography &amp; Major Cities</h3>
+      <p>Paris (capital, north-central). Lyon — industrial and culinary hub, southeast. Marseille — largest port city, Mediterranean coast.</p>
+      <h3>Notes</h3>
+      <p>This is where your own ongoing notes would go — things you're following, questions to dig into, context for current events.</p>
+    `
+  }
+};
+
+function project(lat, lon){
+  const x = (lon + 180) / 360 * 1000;
+  const y = (90 - lat) / 180 * 500;
+  return [x, y];
+}
+function flagEmoji(iso){
+  return iso.toUpperCase().replace(/./g, c => String.fromCodePoint(c.charCodeAt(0) + 127397));
+}
+
+const svg = document.getElementById('mapsvg');
+function el(tag, attrs){
+  const e = document.createElementNS(NS, tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+const gridG = el('g', {opacity:0.18});
+for(let lon=-180; lon<=180; lon+=30){
+  const [x] = project(0, lon);
+  gridG.appendChild(el('line',{x1:x,y1:0,x2:x,y2:500,stroke:'#ffffff','stroke-width':0.5}));
+}
+for(let lat=-60; lat<=60; lat+=30){
+  const [,y] = project(lat,0);
+  gridG.appendChild(el('line',{x1:0,y1:y,x2:1000,y2:y,stroke:'#ffffff','stroke-width':0.5}));
+}
+svg.appendChild(gridG);
+
+const landG = el('g', {});
+continents.forEach(c=>{
+  landG.appendChild(el('path',{d:c.path, fill:c.color, stroke:'#2b3b46','stroke-width':1, opacity:0.9}));
+});
+svg.appendChild(landG);
+svg.appendChild(el('rect',{x:1,y:1,width:998,height:498,fill:'none',stroke:'#1a2530','stroke-width':2}));
+
+const markersG = el('g', {});
+const groupByName = {};
+const dropdown = document.getElementById('countryDropdown');
+
+countries.sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{
+  const [x,y] = project(c.lat, c.lon);
+  const g = el('g', {class:'country-group' + (reports[c.name] ? ' has-report' : ''), 'data-name':c.name});
+  const dot = el('circle', {class:'dot', cx:x, cy:y, r:5, fill:continentColorByName[c.region], stroke:'#1a2530','stroke-width':1});
+  const label = el('text', {class:'dot-label', x:x+8, y:y+4});
+  label.textContent = c.name;
+  g.appendChild(dot);
+  g.appendChild(label);
+  g.addEventListener('click', ()=> selectCountry(c.name));
+  markersG.appendChild(g);
+  groupByName[c.name] = g;
+
+  const opt = document.createElement('option');
+  opt.value = c.name;
+  opt.textContent = (reports[c.name] ? "★ " : "") + c.name;
+  dropdown.appendChild(opt);
+});
+svg.appendChild(markersG);
+
+dropdown.addEventListener('change', ()=>{
+  if(dropdown.value) selectCountry(dropdown.value);
+});
+
+const panel = document.getElementById('panel');
+
+function selectCountry(name){
+  const c = countries.find(c=>c.name===name);
+  if(!c) return;
+  document.querySelectorAll('.country-group').forEach(g=>g.classList.remove('active'));
+  groupByName[name].classList.add('active');
+  dropdown.value = name;
+
+  const report = reports[name];
+
+  panel.innerHTML = `
+    <div class="country-name"><span class="flag">${flagEmoji(c.iso)}</span>${c.name}</div>
+    <div class="country-meta">${c.region}</div>
+    ${report
+      ? `<div class="report-updated">Last updated ${report.updated}</div>
+         <div class="report-body">${report.html}</div>
+         <a class="download-btn" href="${report.docx}" download>⬇ Download Word document</a>`
+      : `<div class="no-report">No report written yet for ${c.name}.<br><br>Write one in Word (or just send me the text), and I'll add it to this page for you.</div>`
+    }
+  `;
+}
+</script>
+</body>
+</html>
