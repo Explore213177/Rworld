@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>World Watch — Country Reports</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <style>
   :root{
     --parchment:#EFE6D2; --parchment-dark:#E2D5B8; --ink:#23303D; --ink-soft:#56636E;
@@ -35,27 +36,20 @@
 
   .layout{ display:flex; gap:24px; align-items:flex-start; }
   .map-pane{
-    flex:1 1 600px; position:relative; border:1.5px solid var(--ink);
-    background:linear-gradient(180deg, #6E9AA8, #3E6877); border-radius:3px; overflow:hidden;
+    flex:1 1 600px; position:relative; border:1.5px solid var(--ink); border-radius:3px; overflow:hidden;
     box-shadow: 0 6px 18px rgba(0,0,0,0.18), inset 0 0 0 6px rgba(239,230,210,0.9), inset 0 0 0 8px var(--ink);
   }
-  svg#mapsvg{display:block; width:100%; height:auto;}
-  .dot{cursor:pointer; transition: r 0.15s ease;}
-  .dot:hover{filter:brightness(1.3);}
-  .has-report .dot{ stroke:#FFD56B; stroke-width:2; }
-  .dot-label{
-    font-family:'Trebuchet MS', system-ui, sans-serif; font-size:9.5px; fill:#fff;
-    paint-order:stroke; stroke:#1a2530; stroke-width:2px; pointer-events:none; opacity:0; transition:opacity .12s ease;
-  }
-  .country-group:hover .dot-label{opacity:1;}
-  .country-group.active .dot{stroke:#fff; stroke-width:2px;}
-  .country-group.active .dot-label{opacity:1; font-weight:bold;}
+  #map{ height:560px; width:100%; background:#cfe3ec; }
+  .leaflet-popup-content-wrapper{ border-radius:4px; font-family:'Trebuchet MS', system-ui, sans-serif; }
+  .leaflet-popup-content{ margin:10px 12px; font-size:13px; }
+  .leaflet-popup-content b{ font-family:Georgia, serif; font-size:15px; }
 
   .legend{
     position:absolute; bottom:10px; left:10px; font-family:'Trebuchet MS', system-ui, sans-serif;
-    font-size:10.5px; color:#eef3f4; background:rgba(20,32,40,0.45); padding:6px 9px; border-radius:3px;
+    font-size:10.5px; color:var(--ink); background:rgba(255,255,255,0.85); padding:6px 9px;
+    border-radius:3px; z-index:1000; box-shadow:0 1px 4px rgba(0,0,0,0.2);
   }
-  .legend i{width:8px;height:8px;border-radius:50%;display:inline-block; border:2px solid #FFD56B; margin-right:5px;}
+  .legend i{width:8px;height:8px;border-radius:50%;display:inline-block; border:2px solid #C9941F; margin-right:5px; background:#fff;}
 
   .panel{
     flex:0 0 380px; border:1.5px solid var(--ink); background:var(--white-ish); border-radius:3px;
@@ -98,6 +92,7 @@
   @media (max-width: 880px){
     .layout{flex-direction:column;}
     .panel{flex:1 1 auto; width:100%; min-height:auto;}
+    #map{height:420px;}
   }
 </style>
 </head>
@@ -115,32 +110,21 @@
 
   <div class="layout">
     <div class="map-pane">
-      <svg id="mapsvg" viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="map"></div>
       <div class="legend"><i></i>Gold ring = report written</div>
     </div>
 
     <div class="panel" id="panel">
       <div class="panel-empty" id="panelEmpty">
         <svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="22" fill="none" stroke="#B07B2A" stroke-width="1.5"/><path d="M24 6 L27 21 L42 24 L27 27 L24 42 L21 27 L6 24 L21 21 Z" fill="#B07B2A" opacity="0.85"/></svg>
-        Click a country on the map, or use the dropdown above, to open its report.
+        Click a pin on the map, or use the dropdown above, to open its report.
       </div>
     </div>
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-const NS = "http://www.w3.org/2000/svg";
-
-// ---- Continent silhouettes (stylized, not survey-accurate) ----
-const continents = [
-  {color:"#5C8FA8", path:"M95,70 L210,40 L300,65 L320,130 L300,190 L260,235 L215,260 L180,225 L140,235 L120,190 L80,150 L70,100 Z"},
-  {color:"#6FAE7C", path:"M300,265 L360,255 L395,300 L398,365 L375,430 L345,465 L310,440 L290,400 L285,330 Z"},
-  {color:"#B393C9", path:"M460,75 L520,60 L565,75 L575,110 L545,140 L500,150 L465,130 L450,100 Z"},
-  {color:"#D49A4E", path:"M460,155 L520,145 L545,175 L555,230 L535,290 L505,335 L470,345 L450,300 L440,225 L445,185 Z"},
-  {color:"#CB6B4E", path:"M545,140 L610,130 L630,175 L600,210 L560,205 L545,175 Z"},
-  {color:"#C9504C", path:"M580,55 L700,35 L820,55 L850,110 L830,165 L780,210 L720,235 L660,225 L625,180 L600,135 L580,100 Z"},
-  {color:"#4FA8A5", path:"M800,355 L865,340 L905,365 L895,410 L850,425 L805,405 L790,375 Z"}
-];
 const continentColorByName = {
   "N. America":"#3D6FA0","S. America":"#3F8F60","Europe":"#8E5FAE",
   "Africa":"#C97A2A","Middle East":"#C2502E","Asia":"#B5332F","Oceania":"#2E8E8B"
@@ -187,9 +171,6 @@ const countries = [
 ];
 
 // ---- YOUR REPORTS GO HERE ----
-// To add a country: write a "html" field (use <p> and <h3> tags) and
-// point "docx" to the matching file in the /reports folder.
-// Anything not listed here will just show "no report yet" on the site.
 const reports = {
   "France": {
     updated: "27 June 2026",
@@ -206,75 +187,68 @@ const reports = {
   }
 };
 
-function project(lat, lon){
-  const x = (lon + 180) / 360 * 1000;
-  const y = (90 - lat) / 180 * 500;
-  return [x, y];
-}
 function flagEmoji(iso){
   return iso.toUpperCase().replace(/./g, c => String.fromCodePoint(c.charCodeAt(0) + 127397));
 }
 
-const svg = document.getElementById('mapsvg');
-function el(tag, attrs){
-  const e = document.createElementNS(NS, tag);
-  for(const k in attrs) e.setAttribute(k, attrs[k]);
-  return e;
-}
-
-const gridG = el('g', {opacity:0.18});
-for(let lon=-180; lon<=180; lon+=30){
-  const [x] = project(0, lon);
-  gridG.appendChild(el('line',{x1:x,y1:0,x2:x,y2:500,stroke:'#ffffff','stroke-width':0.5}));
-}
-for(let lat=-60; lat<=60; lat+=30){
-  const [,y] = project(lat,0);
-  gridG.appendChild(el('line',{x1:0,y1:y,x2:1000,y2:y,stroke:'#ffffff','stroke-width':0.5}));
-}
-svg.appendChild(gridG);
-
-const landG = el('g', {});
-continents.forEach(c=>{
-  landG.appendChild(el('path',{d:c.path, fill:c.color, stroke:'#2b3b46','stroke-width':1, opacity:0.9}));
+// ---- Map setup ----
+const map = L.map('map', {
+  center: [20, 10],
+  zoom: 2,
+  minZoom: 2,
+  maxZoom: 8,
+  worldCopyJump: true
 });
-svg.appendChild(landG);
-svg.appendChild(el('rect',{x:1,y:1,width:998,height:498,fill:'none',stroke:'#1a2530','stroke-width':2}));
 
-const markersG = el('g', {});
-const groupByName = {};
+// Clean, light "Google Maps"-style basemap (free, no API key needed)
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 19
+}).addTo(map);
+
+const markerByName = {};
 const dropdown = document.getElementById('countryDropdown');
 
-countries.sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{
-  const [x,y] = project(c.lat, c.lon);
-  const g = el('g', {class:'country-group' + (reports[c.name] ? ' has-report' : ''), 'data-name':c.name});
-  const dot = el('circle', {class:'dot', cx:x, cy:y, r:5, fill:continentColorByName[c.region], stroke:'#1a2530','stroke-width':1});
-  const label = el('text', {class:'dot-label', x:x+8, y:y+4});
-  label.textContent = c.name;
-  g.appendChild(dot);
-  g.appendChild(label);
-  g.addEventListener('click', ()=> selectCountry(c.name));
-  markersG.appendChild(g);
-  groupByName[c.name] = g;
+countries.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{
+  const hasReport = !!reports[c.name];
+  const marker = L.circleMarker([c.lat, c.lon], {
+    radius: 7,
+    fillColor: continentColorByName[c.region],
+    fillOpacity: 0.95,
+    color: hasReport ? '#C9941F' : '#23303D',
+    weight: hasReport ? 3 : 1.3
+  }).addTo(map);
+
+  marker.bindTooltip(c.name, { direction: 'top', offset: [0,-6] });
+  marker.on('click', ()=> selectCountry(c.name));
+  markerByName[c.name] = marker;
 
   const opt = document.createElement('option');
   opt.value = c.name;
-  opt.textContent = (reports[c.name] ? "★ " : "") + c.name;
+  opt.textContent = (hasReport ? "★ " : "") + c.name;
   dropdown.appendChild(opt);
 });
-svg.appendChild(markersG);
 
 dropdown.addEventListener('change', ()=>{
   if(dropdown.value) selectCountry(dropdown.value);
 });
 
 const panel = document.getElementById('panel');
+let activeName = null;
 
 function selectCountry(name){
   const c = countries.find(c=>c.name===name);
   if(!c) return;
-  document.querySelectorAll('.country-group').forEach(g=>g.classList.remove('active'));
-  groupByName[name].classList.add('active');
+
+  if(activeName && markerByName[activeName]){
+    markerByName[activeName].setStyle({ weight: reports[activeName] ? 3 : 1.3 });
+  }
+  markerByName[name].setStyle({ weight: 4 });
+  activeName = name;
+
   dropdown.value = name;
+  map.flyTo([c.lat, c.lon], Math.max(map.getZoom(), 4), { duration: 0.6 });
 
   const report = reports[name];
 
